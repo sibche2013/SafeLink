@@ -29,10 +29,6 @@ LINK_PATH=[] # [ "link1" , "link2" , ... ]
 FIN_PATH="final.txt"
 FIN_CONF=[]
 CHECK_LOC=False
-CHECK_RES="loc.txt"
-if CHECK_LOC:
-    with open(CHECK_RES, "w") as f:
-        f.write("")
 def remove_empty_strings(input_list):
     return [item for item in input_list if item and item != "\n" ]
 with open(TEXT_PATH,"r") as f:
@@ -1344,58 +1340,159 @@ def parse_configs(conifg,num=0,cv=1,hy2_path="hy2/config.yaml",is_hy2=False): # 
     data_conf=replace_accept_encoding(data_conf)
     data_conf=json.dumps(data_conf, indent=4, cls=MyEncoder)
     return data_conf
-def get_public_ipv4(t,port) -> Optional[str]:
-    """
-     تلاش می‌کند آدرس عمومی IPv4 را با استفاده از سرویس خارجی دریافت کند.
-
-    Returns:
-        Optional[str]: آدرس عمومی IPv4 به صورت رشته در صورت یافتن، در غیر این صورت None.
-    """
-    ip_address_v4: Optional[str] = None # متغیری برای ذخیره IP یافت شده
+def get_public_ipv4(t, port) -> Optional[str]:
+    ip_address_v4: Optional[str] = None
     timeout = 15
-    url_v4 = "http://v4.ipv6-test.com/api/myip.php" # فقط به این URL نیاز داریم
+    url_v4 = "http://v4.ipv6-test.com/api/myip.php"
     proxy_host = f"127.0.0.{t}"
     proxies = {
         "http": f"http://{proxy_host}:{port}",
-        "https": f"http://{proxy_host}:{port}" # HTTPS requests also go through the HTTP proxy
+        "https": f"http://{proxy_host}:{port}"
     }
     headers = {
-        "Connection": "close" # Explicitly close connection
+        "Connection": "close"
     }
     print("Attempting to fetch public IPv4 address...")
     try:
-        # فقط درخواست IPv4 را ارسال می‌کنیم
-        response = requests.get(url_v4, timeout=timeout,proxies=proxies,headers=headers)
-        response.raise_for_status()  # بررسی خطاهای HTTP (مثل 4xx, 5xx)
-
-        # متن پاسخ را می‌خوانیم و فضاهای خالی احتمالی را حذف می‌کنیم
+        response = requests.get(url_v4, timeout=timeout, proxies=proxies, headers=headers)
+        response.raise_for_status()
         ip_address_v4 = response.text.strip()
-
-        # بررسی می‌کنیم که آیا پاسخ خالی است یا نه
         if not ip_address_v4:
             print("Warning: IPv4 API returned an empty response.")
-            ip_address_v4 = None # اگر خالی بود، None در نظر می‌گیریم
+            ip_address_v4 = None
         else:
             print(f"Successfully fetched IPv4: {ip_address_v4}")
-
     except requests.exceptions.Timeout:
         print("Fetching IPv4 address timed out.")
-        ip_address_v4 = None # در صورت تایم‌اوت None برمی‌گردانیم
+        ip_address_v4 = None
     except requests.exceptions.RequestException as e:
         print(f"Error fetching IPv4 address: {e}")
-        ip_address_v4 = None # در صورت خطای دیگر None برمی‌گردانیم
+        ip_address_v4 = None
     except Exception as e:
         print(f"An unexpected error occurred fetching IPv4: {e}")
-        ip_address_v4 = None # برای خطاهای پیش‌بینی نشده
-
-    # فقط آدرس IPv4 (یا None) را برمی‌گردانیم
+        ip_address_v4 = None
     return ip_address_v4
-def get_ip_details(ip_address):
-    try:
-        response = requests.get(f'http://ip-api.com/json/{ip_address}', timeout=10)
-        return response.json().get('countryCode', 'None')
-    except Exception:
-        return 'None'
+def should_retry_ip_api(exception):
+    if isinstance(exception, (requests.exceptions.Timeout,
+                              requests.exceptions.ConnectionError,
+                              requests.exceptions.ConnectTimeout)):
+        print(f"Retrying due to network error: {exception}")
+        return True
+    if isinstance(exception, requests.exceptions.HTTPError):
+        if exception.response.status_code >= 500:
+            print(f"Retrying due to HTTP server error: {exception}")
+            return True
+    print(f"Not retrying for error: {exception}")
+    return False
+@retry(
+    stop_max_attempt_number=3,
+    wait_exponential_multiplier=1000,
+    wait_exponential_max=10000,
+    retry_on_exception=should_retry_ip_api
+)
+def fetch_country_code_from_api(ip_address: str) -> str:
+    print(f"Attempting to fetch country code for IP: {ip_address}...")
+    response = requests.get(f'http://ip-api.com/json/{ip_address}?fields=status,message,countryCode', timeout=7)
+    response.raise_for_status()
+    data = response.json()
+    if data.get("status") == "success" and data.get("countryCode"):
+        fetched_code = data.get('countryCode')
+        if isinstance(fetched_code, str) and len(fetched_code) == 2 and fetched_code.isalpha():
+            return fetched_code.upper()
+        else:
+            raise ValueError(f"Invalid country code '{fetched_code}' received for IP {ip_address}.")
+    else:
+        error_message = data.get('message', 'Unknown error from ip-api or status not success')
+        raise ValueError(f"Error from ip-api for IP {ip_address}: {error_message}")
+def get_ip_details(ip_address: Optional[str], original_config_str: str):
+    global FIN_CONF
+    country_code = "XX"
+    if ip_address:
+        try:
+            country_code = fetch_country_code_from_api(ip_address)
+            print(f"Successfully fetched country code: {country_code} for IP {ip_address} after retries.")
+        except ValueError as e:
+            print(f"{e}. Using default XX.")
+        except requests.exceptions.HTTPError as e:
+            print(f"HTTP error from ip-api (after retries) for {ip_address}: {e}. Using default XX.")
+        except requests.exceptions.Timeout:
+            print(f"Final timeout fetching IP details for {ip_address}. Using default XX.")
+        except requests.exceptions.RequestException as e:
+            print(f"Final network error requesting ip-api for {ip_address}: {e}. Using default XX.")
+        except json.JSONDecodeError:
+            print(f"Final error parsing JSON response from ip-api for {ip_address}. Using default XX.")
+        except Exception as e:
+            print(f"Final unexpected error fetching country code for {ip_address}: {e}. Using default XX.")
+    else:
+        print(f"IP address not provided for config {original_config_str.strip()[:30]}... Using default country code XX.")
+    config_stripped = original_config_str.strip()
+    processed_as_vmess_successfully = False
+    if config_stripped.startswith("vmess://"):
+        try:
+            vmess_link_parts = config_stripped.replace("vmess://", "", 1).split("#", 1)
+            base64_encoded_part = vmess_link_parts[0]
+            missing_padding = len(base64_encoded_part) % 4
+            if missing_padding:
+                base64_encoded_part += '=' * (4 - missing_padding)
+            decoded_bytes = base64.b64decode(base64_encoded_part)
+            decoded_json_str = decoded_bytes.decode('utf-8')
+            vmess_data = json.loads(decoded_json_str)
+            original_ps = vmess_data.get("ps", "")
+            if not isinstance(original_ps, str):
+                original_ps = str(original_ps)
+            if not original_ps.strip():
+                add = vmess_data.get("add", "unknown_host")
+                port = vmess_data.get("port", "0")
+                original_ps = f"vmess_{add}_{port}"
+                print(f"Field 'ps' in vmess config was empty or non-existent, using default name '{original_ps}' for internal 'ps'.")
+            new_ps = f"{original_ps.strip()}::{country_code}"
+            vmess_data["ps"] = new_ps
+            updated_json_str = json.dumps(vmess_data, ensure_ascii=False, separators=(',', ':'))
+            updated_base64_bytes = base64.b64encode(updated_json_str.encode('utf-8'))
+            updated_base64_str = updated_base64_bytes.decode('utf-8').rstrip("=")
+            final_config_string = f"vmess://{updated_base64_str}"
+            print(f"DEBUG (Vmess): Final config with updated 'ps': {final_config_string}")
+            FIN_CONF.append(final_config_string)
+            processed_as_vmess_successfully = True
+        except (base64.binascii.Error, UnicodeDecodeError) as e:
+            print(f"Error decoding base64 or utf-8 for vmess config: {config_stripped[:50]}... Error: {e}. Using generic tagging for this vmess link.")
+        except json.JSONDecodeError as e:
+            print(f"Error parsing internal JSON for vmess config: {config_stripped[:50]}... Error: {e}. Using generic tagging for this vmess link.")
+        except Exception as e:
+            print(f"Unexpected error during specialized vmess config processing {config_stripped[:50]}...: {e}. Using generic tagging for this vmess link.")
+    if not processed_as_vmess_successfully:
+        parts = config_stripped.split("#", 1)
+        config_base = parts[0]
+        original_tag_encoded = parts[1] if len(parts) > 1 else ""
+        try:
+            original_tag_decoded = urllib.parse.unquote(original_tag_encoded)
+        except Exception:
+            original_tag_decoded = original_tag_encoded
+        if not original_tag_decoded.strip():
+            protocol_match = re.match(r"^\w+://", config_base)
+            protocol_name = protocol_match.group(0).replace("://","").lower() if protocol_match else "config"
+            server_part_for_tag = config_base.split("://", 1)[-1].split("?",1)[0].split("#",1)[0]
+            host_info_candidate = server_part_for_tag.split('@')[-1]
+            address_match = re.match(r"([^:]+)(?::(\d+))?", host_info_candidate)
+            server_brief = "unknown_server"
+            if address_match:
+                host_for_tag = address_match.group(1)
+                port_for_tag = address_match.group(2)
+                server_brief = f"{host_for_tag}"
+                if port_for_tag:
+                    server_brief += f"_{port_for_tag}"
+            elif host_info_candidate and len(host_info_candidate.split(':')[0]) < 50 :
+                 server_brief = host_info_candidate.split(':')[0]
+            original_tag_decoded = f"{protocol_name}_{server_brief}"
+            if config_stripped.startswith("vmess://"):
+                 print(f"Original tag for vmess config (specialized processing failed) was empty, using '{original_tag_decoded}' for generic tagging.")
+            else:
+                 print(f"Original tag for '{protocol_name}' config was empty or non-existent, using '{original_tag_decoded}'.")
+        new_tag_unencoded = f"{original_tag_decoded.strip()}::{country_code}"
+        new_tag_encoded = urllib.parse.quote(new_tag_unencoded)
+        final_config_string = f"{config_base}#{new_tag_encoded}"
+        print(f"DEBUG (Generic/Fallback): Final config with generic tag: {final_config_string}")
+        FIN_CONF.append(final_config_string)
 def ping_all():
     print("igo")
     xray_abs = os.path.abspath("xray/xray")
@@ -1433,6 +1530,7 @@ def ping_all():
             return value
         return {key: update_value(value) for key, value in input_dict.items()}
     def process_ping(i:str, t,counter=2) :
+        global FIN_CONF
         print(i)
         while t > 100:
             t-=100
@@ -1472,7 +1570,7 @@ def ping_all():
                     headers = {"Connection": "close"}
                     start = time.time()
                     response = requests.get(url, proxies=proxies, timeout=10, headers=headers)
-                    elapsed = (time.time() - start) * 1000  # Convert to milliseconds
+                    elapsed = (time.time() - start) * 1000
                     if response.status_code == 204 or (response.status_code == 200 and len(response.content) == 0):
                         return f"{int(elapsed)}"
                     else:
@@ -1491,10 +1589,12 @@ def ping_all():
             except Exception:
                 result = "-1"
             if result !="-1":
-                FIN_CONF.append(i)
                 if CHECK_LOC:
-                    with open(CHECK_RES, "a") as f:
-                        f.write(get_ip_details(get_public_ipv4(t+2,port))+"\n")
+                    public_ip = get_public_ipv4(t+2, port)
+                    if public_ip:
+                        get_ip_details(public_ip, i)
+                else:
+                    FIN_CONF.append(i)
             if not is_dict:
                 if i.startswith("hy2://") or i.startswith("hysteria2://"):
                     process_manager.stop_process(f"hysteria_{t}")
