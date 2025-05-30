@@ -30,7 +30,7 @@ TEXT_PATH="normal.txt"
 LINK_PATH=[] # [ "link1" , "link2" , ... ]
 FIN_PATH="final.txt"
 FIN_CONF=[]
-CHECK_LOC=False
+CHECK_LOC=True
 def remove_empty_strings(input_list):
     return [item for item in input_list if item and item != "\n" ]
 with open(TEXT_PATH,"r") as f:
@@ -176,6 +176,16 @@ def parse_configs(conifg,num=0,cv=1,hy2_path="hy2/config.yaml",is_hy2=False): # 
                         "address": match.group(2),
                         "port": int(match.group(3))
                     })
+            elif protocol in ["hy2", "hysteria2"]:
+                    match = re.search(rf"{protocol}://([^@]+)@([^:/?#]+):(\d+)", main_config)
+                    if match:
+                        common_params.update(
+                            {
+                                "ss_password": match.group(1),
+                                "address": match.group(2),
+                                "port": int(match.group(3)),
+                            }
+                        )
             else:
                 match = re.search(r'@([^:]+):(\d+)', main_config)
                 if match:
@@ -309,16 +319,17 @@ def parse_configs(conifg,num=0,cv=1,hy2_path="hy2/config.yaml",is_hy2=False): # 
     def parse_hysteria(config: str, common: dict) -> ConfigParams:
         query = re.split(r"\?", config, 1)[1] if "?" in config else ""
         params = parse_query_params(query)
+        print(params.get("obfs-password", ""))
         return ConfigParams(
             **common,
             security="tls",
             hy2_insecure=params.get("insecure", "0") == "1",
             hy2_obfs_password=params.get("obfs-password", ""),
             hy2_hop_interval=int(params.get("hopInterval", 30)),
-            hy2_pinsha256=params.get("pinSHA256",""),
-            hy2_obfs=params.get("obfs",""),
-            sni=params.get("sni", ""),
-            alpn=params.get("alpn", None)
+            hy2_pinsha256=params.get("pinSHA256", ""),
+            hy2_obfs=params.get("obfs", ""),
+            sni=params.get("sni", common.get("address","")),
+            alpn=params.get("alpn", None),
         )
     def parse_socks(config: str, common: dict) -> ConfigParams:
         auth_part = config.split("://")[1].split("@")[0]
