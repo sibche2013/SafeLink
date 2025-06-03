@@ -1867,7 +1867,12 @@ def ping_all():
                     else:
                         get_ip_details(public_ip,i,proxies)
                 else:
-                    FIN_CONF.append(i)
+                    if CHECK_IRAN:
+                        public_ip = get_public_ipv4(t+2, port)
+                        if is_ip_accessible_from_iran_via_check_host(public_ip,proxies):
+                            FIN_CONF.append(i)
+                    else:
+                        FIN_CONF.append(i)
             if not is_dict:
                 if i.startswith("hy2://") or i.startswith("hysteria2://"):
                     process_manager.stop_process(f"hysteria_{t}")
