@@ -30,7 +30,7 @@ TEXT_PATH="normal.txt"
 LINK_PATH=[] # [ "link1" , "link2" , ... ]
 FIN_PATH="final.txt"
 FIN_CONF=[]
-CHECK_LOC=True
+CHECK_LOC=False
 CHECK_IRAN=True
 CHECK_HOST_IRANIAN_NODES = [
     "ir1.node.check-host.net",  # Tehran, AS44244 Mobile Communication Company of Iran (MCI)
@@ -1569,12 +1569,7 @@ def should_retry_ip_api(exception):
             return True
     print(f"Not retrying for error: {exception}")
     return False
-@retry(
-    stop_max_attempt_number=3,
-    wait_exponential_multiplier=1000,
-    wait_exponential_max=10000,
-    retry_on_exception=should_retry_ip_api
-)
+
 def fetch_exit_country_code_via_proxy(proxies_to_use: Optional[dict]) -> str:
     print(f"Fetching EXIT country code using proxy {proxies_to_use.get('http') if proxies_to_use else 'None'}")
     try:
@@ -1684,7 +1679,7 @@ def get_ip_details(ip_address: Optional[str], original_config_str: str,proxies_t
     country_code = "XX"
     if ip_address:
         try:
-            country_code = fetch_exit_country_code_via_proxy(original_config_str)
+            country_code = fetch_exit_country_code_via_proxy(proxies_to_use)
             print(f"Successfully fetched country code: {country_code} for IP {ip_address} after retries.")
         except ValueError as e:
             print(f"{e}. Using default XX.")
