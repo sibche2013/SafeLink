@@ -37,6 +37,8 @@ CHECK_HOST_IRANIAN_NODES = [
     "ir2.node.check-host.net",  # Tehran, AS12880 Telecommunication Infrastructure Company (TIC زیرساخت)
     "ir3.node.check-host.net",  # Tehran, AS58224 Rightel
 ]
+def remove_empty_strings(input_list):
+    return [item for item in input_list if item and item != "\n" ]
 def clear_p(configs_list: list) -> list:
     unique_configs = {}
     for config_line in configs_list:
@@ -47,11 +49,7 @@ def clear_p(configs_list: list) -> list:
         if base_config not in unique_configs:
             unique_configs[base_config] = config_line
     final_list = [f"{config}\n" for config in unique_configs.values()]
-    return final_list
-def remove_empty_strings(input_list):
-    return [item for item in input_list if item and item != "\n" ]
-with open(TEXT_PATH,"r") as f:
-    conf=clear_p(remove_empty_strings(f.readlines()))
+    return remove_empty_strings(final_list)
 class ProcessManager:
     """
     Manages background processes (like Xray, Hysteria) started by the script.
@@ -1794,7 +1792,7 @@ def ping_all():
                     return file_data, True
                 except json.JSONDecodeError:
                     lines = content.splitlines()
-                    return [line for line in lines if line.strip()], False
+                    return clear_p(lines), False
         except FileNotFoundError:
             print(f"ERROR: File not found at {TEXT_PATH}")
             return [], False
