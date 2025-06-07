@@ -40,14 +40,27 @@ CHECK_HOST_IRANIAN_NODES = [
 def remove_empty_strings(input_list):
     return [item for item in input_list if item and item != "\n" ]
 def clear_p(configs_list: list) -> list:
-    unique_configs = {}
+    unique_configs = {}  # دیکشنری برای نگهداری کانفیگ‌های منحصربه‌فرد
     for config_line in configs_list:
         config_line = config_line.strip()
         if not config_line:
             continue
-        base_config = config_line.split('#', 1)[0]
-        if base_config not in unique_configs:
-            unique_configs[base_config] = config_line
+        unique_key = None
+        if config_line.startswith("vmess://"):
+            try:
+                encoded_part = config_line.split("://")[1]
+                missing_padding = len(encoded_part) % 4
+                if missing_padding:
+                    encoded_part += '=' * (4 - missing_padding)
+                decoded_json = base64.b64decode(encoded_part).decode('utf-8')
+                data = json.loads(decoded_json)
+                unique_key = ("vmess", data.get('add'), data.get('port'), data.get('id'))
+            except (json.JSONDecodeError, base64.binascii.Error, Exception):
+                unique_key = config_line
+        else:
+            unique_key = config_line.split('#', 1)[0]
+        if unique_key not in unique_configs:
+            unique_configs[unique_key] = config_line
     final_list = [f"{config}\n" for config in unique_configs.values()]
     return remove_empty_strings(final_list)
 class ProcessManager:
