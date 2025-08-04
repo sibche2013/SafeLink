@@ -1914,7 +1914,7 @@ if  len(LINK_PATH) != 0:
                 except requests.exceptions.JSONDecodeError:
                     content_to_write = response.text
                 with open(TEXT_PATH, "a") as f:
-                    f.write(content_to_write)
+                    f.write("\n"+content_to_write)
 ping_all()
 with open(FIN_PATH,"w") as f:
     try:
@@ -1928,4 +1928,5 @@ with open(FIN_PATH,"w") as f:
     except Exception as e:
         print(f"Unexpected error writing to {FIN_PATH}: {e}")
 exit()
+
 
