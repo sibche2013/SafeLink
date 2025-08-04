@@ -1902,6 +1902,8 @@ def ping_all():
         with open(TEXT_PATH, "w") as f:
             f.writelines(f"{line}\n" for line in copy_in_sus_nms)
 if  len(LINK_PATH) != 0:
+    with open(TEXT_PATH, "w") as f:
+        f.write("")
     for link  in LINK_PATH:
         if link.startswith("http://") or link.startswith("https://"):
                 response = requests.get(link, timeout=15)
@@ -1911,7 +1913,7 @@ if  len(LINK_PATH) != 0:
                     content_to_write = json.dumps(json_data, indent=4, ensure_ascii=False)
                 except requests.exceptions.JSONDecodeError:
                     content_to_write = response.text
-                with open(TEXT_PATH, "w") as f:
+                with open(TEXT_PATH, "a") as f:
                     f.write(content_to_write)
 ping_all()
 with open(FIN_PATH,"w") as f:
@@ -1926,3 +1928,4 @@ with open(FIN_PATH,"w") as f:
     except Exception as e:
         print(f"Unexpected error writing to {FIN_PATH}: {e}")
 exit()
+
