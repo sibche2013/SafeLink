@@ -1915,19 +1915,139 @@ if  len(LINK_PATH) != 0:
                     content_to_write = response.text
                 with open(TEXT_PATH, "a") as f:
                     f.write("\n"+content_to_write)
-ping_all()
-with open(FIN_PATH,"w") as f:
-    try:
-        if FIN_CONF:
-            if isinstance(FIN_CONF[0], dict):
-                json.dump(FIN_CONF, f, indent=2, ensure_ascii=False)
+# ==============================================================================
+# بخش جدید برای ذخیره‌سازی فایل‌ها به صورت مرتب‌شده
+# ==============================================================================
+import base64
+import re
+import urllib.parse
+
+def country_code_to_emoji(code: str) -> str:
+    """کد دو حرفی کشور را به ایموجی پرچم تبدیل می‌کند."""
+    if not isinstance(code, str) or len(code) != 2:
+        return "❓"  # ایموجی برای کدهای نامشخص یا XX
+    code = code.upper()
+    if code == "XX":
+        return "❓"
+    return "".join(chr(ord(c) + 127397) for c in code)
+
+def save_sorted_configs(configs: list):
+    """
+    کانفیگ‌ها را بر اساس پروتکل و موقعیت تفکیک کرده و به همراه نسخه‌های Base64 ذخیره می‌کند.
+    """
+    if not configs:
+        print("هیچ کانفیگ موفقی برای ذخیره‌سازی یافت نشد.")
+        # ایجاد فایل‌های خالی
+        open("final.txt", 'w').close()
+        open("final_b64.txt", 'w').close()
+        return
+
+    # دیکشنری برای نگهداری کانفیگ‌ها بر اساس پروتکل و کشور
+    configs_by_protocol = {}
+    configs_by_country = {}
+
+    print("شروع مرتب‌سازی کانفیگ‌ها بر اساس پروتکل و موقعیت...")
+    for config in configs:
+        config = config.strip()
+        if not config:
+            continue
+
+        # --- تفکیک بر اساس پروتکل ---
+        protocol = "unknown"
+        if config.startswith("vless://"):
+            protocol = "vless"
+        elif config.startswith("vmess://"):
+            protocol = "vmess"
+        elif config.startswith("trojan://"):
+            protocol = "trojan"
+        elif config.startswith("ss://"):
+            protocol = "ss"
+        elif config.startswith("hy2://") or config.startswith("hysteria2://"):
+            protocol = "hy2"
+        elif config.startswith("wireguard://"):
+            protocol = "wireguard"
+        elif config.startswith("socks://"):
+            protocol = "socks"
+        
+        configs_by_protocol.setdefault(protocol, []).append(config)
+
+        # --- تفکیک بر اساس کشور ---
+        try:
+            tag_part = config.split('#', 1)[1]
+            decoded_tag = urllib.parse.unquote(tag_part)
+            # استخراج کد کشور با فرمت ::XX از انتهای تگ
+            match = re.search(r'::([A-Z]{2}|XX)$', decoded_tag)
+            if match:
+                country_code = match.group(1)
             else:
-                f.writelines(f"{line.strip()}\n" for line in FIN_CONF if line.strip())
-        else:
-            print(f"No successful configs found. Writing empty {FIN_PATH}.")
-    except Exception as e:
-        print(f"Unexpected error writing to {FIN_PATH}: {e}")
+                country_code = "XX" # پیش‌فرض
+        except IndexError:
+            country_code = "XX" # اگر کانفیگ تگ نداشت
+        
+        configs_by_country.setdefault(country_code, []).append(config)
+
+    # تابع کمکی برای نوشتن در فایل
+    def write_to_file(filepath, data_list):
+        try:
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write("\n".join(data_list))
+            print(f"فایل '{filepath}' با موفقیت ذخیره شد.")
+        except Exception as e:
+            print(f"خطا در نوشتن فایل '{filepath}': {e}")
+
+    # 1. ذخیره فایل نهایی (final.txt) و نسخه Base64 آن
+    write_to_file("final.txt", configs)
+    final_b64 = [base64.b64encode(c.encode('utf-8')).decode('utf-8') for c in configs]
+    write_to_file("final_b64.txt", final_b64)
+
+    # 2. ذخیره فایل‌های تفکیک شده بر اساس پروتکل
+    for protocol, proto_configs in configs_by_protocol.items():
+        filename = f"{protocol}.txt"
+        filename_b64 = f"{protocol}_b64.txt"
+        
+        write_to_file(filename, proto_configs)
+        
+        proto_b64 = [base64.b64encode(c.encode('utf-8')).decode('utf-8') for c in proto_configs]
+        write_to_file(filename_b64, proto_b64)
+
+    # 3. ذخیره فایل‌های تفکیک شده بر اساس موقعیت در پوشه loc
+    os.makedirs("loc", exist_ok=True)
+    for code, country_configs in configs_by_country.items():
+        flag_emoji = country_code_to_emoji(code)
+        filename = os.path.join("loc", f"{flag_emoji}.txt")
+        write_to_file(filename, country_configs)
+
+# ==============================================================================
+# اجرای توابع اصلی و سپس ذخیره‌سازی
+# ==============================================================================
+# ... (تمام کدهای قبلی شما تا اینجا باقی می‌مانند)
+
+if  len(LINK_PATH) != 0:
+    with open(TEXT_PATH, "w") as f:
+        f.write("")
+    for link  in LINK_PATH:
+        # ... (این بخش بدون تغییر باقی می‌ماند)
+        if link.startswith("http://") or link.startswith("https://"):
+                response = requests.get(link, timeout=15)
+                response.raise_for_status()
+                try:
+                    json_data = response.json()
+                    content_to_write = json.dumps(json_data, indent=4, ensure_ascii=False)
+                except requests.exceptions.JSONDecodeError:
+                    content_to_write = response.text
+                with open(TEXT_PATH, "a") as f:
+                    f.write("\n"+content_to_write)
+
+ping_all()
+
+# <<<<<<<<<<<<<<<< این بخش جایگزین می‌شود >>>>>>>>>>>>>>>>>>
+# کد قدیمی را حذف کرده و تابع جدید را فراخوانی کنید
+save_sorted_configs(FIN_CONF)
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+print("پردازش با موفقیت به پایان رسید.")
 exit()
+
 
 
 
