@@ -34,9 +34,7 @@ FIN_PATH="final.txt"
 # در اینجا متن دلخواه خود را که می‌خواهید در سطر اول تمام فایل‌ها قرار گیرد، بنویسید
 FILE_HEADER_TEXT = "//profile-title: base64:2YfZhduM2LTZhyDZgdi52KfZhCDwn5iO8J+YjvCfmI4gaGFtZWRwNzE=
 //profile-update-interval: 1
-//subscription-userinfo: upload=0; download=76235908096; total=1486058684416; expire=1767212999
-#profile-web-page-url: @hamedvpns
-"
+//subscription-userinfo: upload=0; download=76235908096; total=1486058684416; expire=1767212999"
 # ==============================================================================
 FIN_CONF=[]
 CHECK_LOC=True
@@ -2093,6 +2091,7 @@ save_sorted_configs(FIN_CONF)
 
 print("پردازش با موفقیت به پایان رسید.")
 exit()
+
 
 
 
