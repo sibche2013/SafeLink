@@ -1,59 +1,74 @@
-name: ch
+name: Sub Checker Creator
 
 on:
+  # به شما اجازه می‌دهد اکشن را به صورت دستی از تب Actions اجرا کنید
   workflow_dispatch:
+  # اجرای خودکار بر اساس زمان‌بندی
   schedule:
-    - cron: '0 */5 * * *'
+    - cron: '0 */3 * * *' # هر 3 ساعت یکبار اجرا می‌شود
 
-# جلوگیری از اجرای همزمان اکشن برای حل قطعی مشکل Merge Conflict
+# ==============================================================================
+# راه‌حل قطعی برای مشکل Merge Conflict
+# این بخش تضمین می‌کند که هرگز بیش از یک اجرا از این اکشن به صورت همزمان
+# در حال اجرا نخواهد بود و در صورت شروع یک اجرای جدید، قبلی لغو می‌شود.
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true
+# ==============================================================================
 
 permissions:
-  contents: write
+  contents: write # برای کامیت و پوش کردن نتایج لازم است
 
 jobs:
-  deploy:
+  build-and-commit:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.11' # استفاده از یک نسخه مشخص و پایدار
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: pip install requests psutil retrying PyYaml
 
-      # تمیز کردن نتایج قدیمی برای شروعی تازه در هر اجرا
-      - name: Clean up old results
+      # ==============================================================================
+      # راه‌حل کمکی: تمیز کردن نتایج قدیمی
+      # این کار تضمین می‌کند که هر اجرا از یک نقطه کاملاً تمیز شروع می‌شود و
+      # فایل‌های قدیمی (مثلاً پرچم کشوری که دیگر وجود ندارد) باقی نمی‌مانند.
+      - name: Clean up old results before run
         run: |
           rm -f final.txt final_b64.txt vless*.txt vmess*.txt trojan*.txt ss*.txt hy2*.txt wireguard*.txt socks*.txt
           rm -rf loc/
+      # ==============================================================================
 
-      - name: Set execute permissions
+      - name: Set execute permissions for binaries
         run: |
           chmod +x xray/xray
           chmod +x hy2/hysteria
 
-      - name: Run checker script
+      - name: Run the checker script
         run: python cl.py
 
-      - name: Commit and push if there are changes
+      - name: Commit and Push new results
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
+          # تمام فایل‌های جدید یا تغییر کرده را به stage اضافه کن
           git add .
           
+          # فقط در صورتی که تغییری وجود داشته باشد، کامیت و پوش کن
           if ! git diff --staged --quiet; then
             echo "Changes detected. Committing and pushing..."
             git commit -m "chore: Update subscription results [skip ci]"
+            
+            # این خط برای جلوگیری از خطای race condition در موارد نادر باقی می‌ماند
             git pull --rebase
+            
             git push
           else
-            echo "No changes to commit."
+            echo "No changes detected to commit."
           fi
