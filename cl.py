@@ -27,7 +27,7 @@ with open(CONF_PATH,"r") as file_client_set:
         f=json.load(file_client_set)
         test_link_=f["core"]["test_url"]
 TEXT_PATH="normal.txt"
-LINK_PATH=[] # [ "https://raw.githubusercontent.com/darkvpnapp/CloudflarePlus/refs/heads/main/proxy" , "https://raw.githubusercontent.com/darkvpnapp/CloudflarePlus/refs/heads/main/proxy" , ... ]
+[ "https://raw.githubusercontent.com/darkvpnapp/CloudflarePlus/refs/heads/main/proxy" , "https://raw.githubusercontent.com/darkvpnapp/CloudflarePlus/refs/heads/main/proxy" ] # [ "" , "" , ... ]
 FIN_PATH="final.txt"
 FIN_CONF=[]
 CHECK_LOC=True
@@ -1928,6 +1928,7 @@ with open(FIN_PATH,"w") as f:
     except Exception as e:
         print(f"Unexpected error writing to {FIN_PATH}: {e}")
 exit()
+
 
 
 
