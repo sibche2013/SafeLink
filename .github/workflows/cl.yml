@@ -1,22 +1,17 @@
-
 name: ch
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
   schedule:
-    - cron: '0 */1 * * *' # هر 8 ساعت اجرا می‌شود
+    - cron: '0 */3 * * *'
 
-# <<<<<<<<<<<<<<<< این بخش را اضافه کنید >>>>>>>>>>>>>>>>
+# 1. جلوگیری از اجرای همزمان برای حل مشکل Merge Conflict
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 permissions:
-  contents: write # مجوز نوشتن برای پوش کردن لازم است
+  contents: write
 
 jobs:
   deploy:
@@ -24,20 +19,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        # مهم: توکن پیش‌فرض معمولاً کافیه، ولی گاهی برای پوش به شاخه‌های محافظت‌شده
-        # یا تنظیمات خاص، نیاز به personal access token (PAT) هست.
-        # فعلاً با توکن پیش‌فرض کار می‌کنیم.
-
-      - name: Configure Git Credentials
-        run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: 3.x # بهتر است نسخه دقیق‌تری مثل '3.11' مشخص کنید
+          python-version: '3.11'
 
+      - name: Install dependencies
+        run: pip install requests psutil retrying PyYaml
+
+      # 2. تمیز کردن نتایج قدیمی برای شروعی تازه در هر اجرا
       - name: Clean up old results
         run: |
           rm -f final.txt final_b64.txt vless*.txt vmess*.txt trojan*.txt ss*.txt hy2*.txt wireguard*.txt socks*.txt
@@ -51,54 +42,18 @@ jobs:
       - name: Run checker script
         run: python cl.py
 
-      # Cache steps (اختیاری ولی خوب)
-      - name: Set weekly cache key
-        run: echo "cache_id=$(date --utc '+%V')" >> $GITHUB_ENV
-
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          key: pip-cache-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/requirements.txt') }}-${{ env.cache_id }} # کلید بهتر برای کش
-          path: ~/.cache/pip
-          restore-keys: |
-            pip-cache-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-
-
-      - name: Install dependencies
-        run: pip install requests psutil retrying PyYaml
-        # بهتره یک فایل requirements.txt بسازید و از اون استفاده کنید:
-        # run: pip install -r requirements.txt
-
-      - name: Set execute permissions
-        run: |
-          chmod +x xray/xray
-          chmod +x hy2/hysteria
-
-      - name: Run checker script
-        run: python cl.py
-
       - name: Commit and push if there are changes
         run: |
           git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          # تمام فایل‌های جدید یا تغییر کرده را اضافه کن
           git add .
           
-          # بررسی کن آیا تغییری برای کامیت وجود دارد یا نه
           if ! git diff --staged --quiet; then
             echo "Changes detected. Committing and pushing..."
-            
-            # کامیت کردن تغییرات
             git commit -m "chore: Update subscription results [skip ci]"
-            
-            # <<<<<<<<<<<<<<<< این خط کلیدی و جدید است >>>>>>>>>>>>>>>>
-            # آخرین تغییرات را از ریپازیتوری دریافت کن و کامیت خود را بالای آن قرار بده
             git pull --rebase
-            # <<<<<<<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-            
-            # حالا تغییرات را push کن
             git push
-            
           else
             echo "No changes to commit."
           fi
