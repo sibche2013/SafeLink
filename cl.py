@@ -29,6 +29,15 @@ with open(CONF_PATH,"r") as file_client_set:
 TEXT_PATH="normal.txt"
 LINK_PATH=[ "https://raw.githubusercontent.com/hamedp-71/Trojan/refs/heads/main/hp.txt" , "https://raw.githubusercontent.com/darkvpnapp/CloudflarePlus/refs/heads/main/proxy" , "https://raw.githubusercontent.com/roosterkid/openproxylist/main/V2RAY_RAW.txt" , "https://raw.githubusercontent.com/mahsa114232-dot/My-sub/refs/heads/main/sub.txt" ] # [ "" , "" , ... ]
 FIN_PATH="final.txt"
+# ==============================================================================
+# <<<<<<<<<<<<<<<< این خط را اضافه کنید >>>>>>>>>>>>>>>>
+# در اینجا متن دلخواه خود را که می‌خواهید در سطر اول تمام فایل‌ها قرار گیرد، بنویسید
+FILE_HEADER_TEXT = "//profile-title: base64:2YfZhduM2LTZhyDZgdi52KfZhCDwn5iO8J+YjvCfmI4gaGFtZWRwNzE=
+//profile-update-interval: 1
+//subscription-userinfo: upload=0; download=76235908096; total=1486058684416; expire=1767212999
+#profile-web-page-url: @hamedvpns
+"
+# ==============================================================================
 FIN_CONF=[]
 CHECK_LOC=True
 CHECK_IRAN=True
@@ -2065,6 +2074,7 @@ save_sorted_configs(FIN_CONF)
 
 print("پردازش با موفقیت به پایان رسید.")
 exit()
+
 
 
 
