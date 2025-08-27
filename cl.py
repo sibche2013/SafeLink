@@ -2014,13 +2014,7 @@ def save_sorted_configs(configs: list):
         except IndexError:
             # اگر کانفیگی به هر دلیلی تگ # نداشت
             print(f"عیب‌یابی: کانفیگ زیر فاقد تگ بود و در دسته '❓' قرار گرفت: {config[:40]}...")
-        
-**کد صحیح که باید جایگزین کنید:**
-(من همچنین یک جفت کوتیشن دور کانفیگ اضافه می‌کنم تا خروجی خواناتر شود)
-```python
-# ... داخل تابع save_sorted_configs
         except Exception as e:
-            # <<<<<<<<<<<<<<<< این خط را اصلاح کنید >>>>>>>>>>>>>>>>
             print(f"عیب‌یابی: خطای ناشناخته در استخراج تگ برای کانفیگ '{config[:40]}...': {e}")
         configs_by_country.setdefault(flag_emoji, []).append(config)
 
@@ -2094,6 +2088,7 @@ save_sorted_configs(FIN_CONF)
 
 print("پردازش با موفقیت به پایان رسید.")
 exit()
+
 
 
 
