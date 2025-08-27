@@ -3,7 +3,7 @@ name: ch
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 */4 * * *'
+    - cron: '0 */5 * * *'
 
 # جلوگیری از اجرای همزمان اکشن برای حل قطعی مشکل Merge Conflict
 concurrency:
