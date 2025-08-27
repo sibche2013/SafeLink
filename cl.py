@@ -1915,17 +1915,59 @@ if  len(LINK_PATH) != 0:
                     content_to_write = response.text
                 with open(TEXT_PATH, "a") as f:
                     f.write("\n"+content_to_write)
+
 # ==============================================================================
-# بخش جدید برای ذخیره‌سازی فایل‌ها به صورت مرتب‌شده
+# بخش جدید برای پیش‌پردازش، تست و ذخیره‌سازی فایل‌ها
 # ==============================================================================
 import base64
+import json
 import re
+import os
 import urllib.parse
+
+def set_initial_tag(configs_list: list, new_tag: str) -> list:
+    """
+    تگ اولیه تمام کانفیگ‌ها را به مقدار مشخص شده تغییر می‌دهد.
+    این تابع به صورت ویژه کانفیگ‌های vmess را با رعایت پدینگ مدیریت می‌کند.
+    """
+    modified_configs = []
+    print(f"در حال تنظیم تگ اولیه '{new_tag}' برای تمام کانفیگ‌ها...")
+    
+    for config in configs_list:
+        config = config.strip()
+        if not config:
+            continue
+
+        if config.startswith("vmess://"):
+            try:
+                encoded_part = config.split("://", 1)[1].split("#", 1)[0]
+                missing_padding = len(encoded_part) % 4
+                if missing_padding:
+                    encoded_part += '=' * (4 - missing_padding)
+                
+                decoded_json_str = base64.b64decode(encoded_part).decode('utf-8')
+                vmess_data = json.loads(decoded_json_str)
+                vmess_data['ps'] = new_tag
+                
+                updated_json_str = json.dumps(vmess_data, separators=(',', ':'), ensure_ascii=False)
+                updated_base64_str = base64.b64encode(updated_json_str.encode('utf-8')).decode('utf-8').rstrip("=")
+                
+                modified_configs.append(f"vmess://{updated_base64_str}")
+            except Exception as e:
+                print(f"خطا در پردازش کانفیگ vmess: {config[:30]}... ({e}). کانفیگ بدون تغییر باقی ماند.")
+                modified_configs.append(config)
+        else:
+            base_config = config.split('#', 1)[0]
+            encoded_tag = urllib.parse.quote(new_tag)
+            modified_configs.append(f"{base_config}#{encoded_tag}")
+            
+    print("تنظیم تگ اولیه با موفقیت انجام شد.")
+    return modified_configs
 
 def country_code_to_emoji(code: str) -> str:
     """کد دو حرفی کشور را به ایموجی پرچم تبدیل می‌کند."""
     if not isinstance(code, str) or len(code) != 2:
-        return "❓"  # ایموجی برای کدهای نامشخص یا XX
+        return "❓"
     code = code.upper()
     if code == "XX":
         return "❓"
@@ -1937,56 +1979,52 @@ def save_sorted_configs(configs: list):
     """
     if not configs:
         print("هیچ کانفیگ موفقی برای ذخیره‌سازی یافت نشد.")
-        # ایجاد فایل‌های خالی
         open("final.txt", 'w').close()
         open("final_b64.txt", 'w').close()
         return
 
-    # دیکشنری برای نگهداری کانفیگ‌ها بر اساس پروتکل و کشور
     configs_by_protocol = {}
     configs_by_country = {}
 
-    print("شروع مرتب‌سازی کانفیگ‌ها بر اساس پروتکل و موقعیت...")
+    print("شروع مرتب‌سازی کانفیگ‌های نهایی بر اساس پروتکل و موقعیت...")
     for config in configs:
         config = config.strip()
         if not config:
             continue
 
-        # --- تفکیک بر اساس پروتکل ---
         protocol = "unknown"
-        if config.startswith("vless://"):
-            protocol = "vless"
-        elif config.startswith("vmess://"):
-            protocol = "vmess"
-        elif config.startswith("trojan://"):
-            protocol = "trojan"
-        elif config.startswith("ss://"):
-            protocol = "ss"
-        elif config.startswith("hy2://") or config.startswith("hysteria2://"):
-            protocol = "hy2"
-        elif config.startswith("wireguard://"):
-            protocol = "wireguard"
-        elif config.startswith("socks://"):
-            protocol = "socks"
+        if config.startswith("vless://"): protocol = "vless"
+        elif config.startswith("vmess://"): protocol = "vmess"
+        elif config.startswith("trojan://"): protocol = "trojan"
+        elif config.startswith("ss://"): protocol = "ss"
+        elif config.startswith("hy2://") or config.startswith("hysteria2://"): protocol = "hy2"
+        elif config.startswith("wireguard://"): protocol = "wireguard"
+        elif config.startswith("socks://"): protocol = "socks"
         
         configs_by_protocol.setdefault(protocol, []).append(config)
 
-        # --- تفکیک بر اساس کشور ---
+        country_code = "XX"
         try:
-            tag_part = config.split('#', 1)[1]
-            decoded_tag = urllib.parse.unquote(tag_part)
-            # استخراج کد کشور با فرمت ::XX از انتهای تگ
-            match = re.search(r'::([A-Z]{2}|XX)$', decoded_tag)
+            # برای vmess، تگ داخل base64 است و توسط get_ip_details اضافه شده. اینجا فقط می‌خوانیم.
+            if config.startswith("vmess://"):
+                encoded_part = config.split("://", 1)[1].split("#", 1)[0]
+                missing_padding = len(encoded_part) % 4
+                if missing_padding: encoded_part += '=' * (4 - missing_padding)
+                decoded_json_str = base64.b64decode(encoded_part).decode('utf-8')
+                vmess_data = json.loads(decoded_json_str)
+                tag = vmess_data.get('ps', '')
+            else: # برای بقیه پروتکل‌ها
+                 tag_part = config.split('#', 1)[1]
+                 tag = urllib.parse.unquote(tag_part)
+
+            match = re.search(r'::([A-Z]{2}|XX)$', tag)
             if match:
                 country_code = match.group(1)
-            else:
-                country_code = "XX" # پیش‌فرض
-        except IndexError:
-            country_code = "XX" # اگر کانفیگ تگ نداشت
+        except Exception:
+            pass # اگر تگ یا فرمت مورد نظر وجود نداشت، همان XX باقی می‌ماند
         
         configs_by_country.setdefault(country_code, []).append(config)
 
-    # تابع کمکی برای نوشتن در فایل
     def write_to_file(filepath, data_list):
         try:
             with open(filepath, "w", encoding="utf-8") as f:
@@ -1995,63 +2033,58 @@ def save_sorted_configs(configs: list):
         except Exception as e:
             print(f"خطا در نوشتن فایل '{filepath}': {e}")
 
-    # 1. ذخیره فایل نهایی (final.txt) و نسخه Base64 آن
+    # 1. ذخیره فایل نهایی
     write_to_file("final.txt", configs)
     final_b64 = [base64.b64encode(c.encode('utf-8')).decode('utf-8') for c in configs]
     write_to_file("final_b64.txt", final_b64)
 
-    # 2. ذخیره فایل‌های تفکیک شده بر اساس پروتکل
+    # 2. ذخیره بر اساس پروتکل
     for protocol, proto_configs in configs_by_protocol.items():
-        filename = f"{protocol}.txt"
-        filename_b64 = f"{protocol}_b64.txt"
-        
-        write_to_file(filename, proto_configs)
-        
+        write_to_file(f"{protocol}.txt", proto_configs)
         proto_b64 = [base64.b64encode(c.encode('utf-8')).decode('utf-8') for c in proto_configs]
-        write_to_file(filename_b64, proto_b64)
+        write_to_file(f"{protocol}_b64.txt", proto_b64)
 
-    # 3. ذخیره فایل‌های تفکیک شده بر اساس موقعیت در پوشه loc
+    # 3. ذخیره بر اساس موقعیت
     os.makedirs("loc", exist_ok=True)
     for code, country_configs in configs_by_country.items():
         flag_emoji = country_code_to_emoji(code)
-        filename = os.path.join("loc", f"{flag_emoji}.txt")
-        write_to_file(filename, country_configs)
+        write_to_file(os.path.join("loc", f"{flag_emoji}.txt"), country_configs)
 
 # ==============================================================================
-# اجرای توابع اصلی و سپس ذخیره‌سازی
+# بخش اصلی اجرای اسکریپت
 # ==============================================================================
-# ... (تمام کدهای قبلی شما تا اینجا باقی می‌مانند)
 
-if  len(LINK_PATH) != 0:
-    with open(TEXT_PATH, "w") as f:
-        f.write("")
-    for link  in LINK_PATH:
-        # ... (این بخش بدون تغییر باقی می‌ماند)
+# مرحله ۱: خواندن کانفیگ‌ها از لینک‌ها
+all_configs_raw = []
+if len(LINK_PATH) != 0:
+    print(f"در حال خواندن کانفیگ از {len(LINK_PATH)} لینک...")
+    for link in LINK_PATH:
         if link.startswith("http://") or link.startswith("https://"):
+            try:
                 response = requests.get(link, timeout=15)
                 response.raise_for_status()
-                try:
-                    json_data = response.json()
-                    content_to_write = json.dumps(json_data, indent=4, ensure_ascii=False)
-                except requests.exceptions.JSONDecodeError:
-                    content_to_write = response.text
-                with open(TEXT_PATH, "a") as f:
-                    f.write("\n"+content_to_write)
+                # محتوای لینک را به لیست اضافه می‌کنیم
+                all_configs_raw.extend(response.text.splitlines())
+            except requests.exceptions.RequestException as e:
+                print(f"خطا در دریافت لینک {link}: {e}")
 
+# مرحله ۲: تمیز کردن و حذف تکراری‌ها و خطوط خالی
+cleaned_configs = clear_p(all_configs_raw)
+
+# مرحله ۳: تنظیم تگ اولیه برای تمام کانفیگ‌ها
+tagged_configs = set_initial_tag(cleaned_configs, "hamedp71")
+
+# مرحله ۴: نوشتن کانفیگ‌های آماده شده در فایل ورودی برای تستر
+print(f"در حال نوشتن {len(tagged_configs)} کانفیگ آماده تست در فایل '{TEXT_PATH}'...")
+with open(TEXT_PATH, "w", encoding="utf-8") as f:
+    f.write("\n".join(tagged_configs))
+
+# مرحله ۵: اجرای فرآیند تست اصلی
+# تابع ping_all کانفیگ‌ها را از TEXT_PATH می‌خواند و نتایج را در FIN_CONF می‌ریزد
 ping_all()
 
-# <<<<<<<<<<<<<<<< این بخش جایگزین می‌شود >>>>>>>>>>>>>>>>>>
-# کد قدیمی را حذف کرده و تابع جدید را فراخوانی کنید
+# مرحله ۶: ذخیره نتایج نهایی به صورت مرتب‌شده
 save_sorted_configs(FIN_CONF)
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 print("پردازش با موفقیت به پایان رسید.")
 exit()
-
-
-
-
-
-
-
-
