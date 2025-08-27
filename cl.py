@@ -1958,28 +1958,34 @@ def country_code_to_emoji(code: str) -> str:
     return "".join(chr(ord(c) + 127397) for c in code)
 
 # ==============================================================================
-# تابع save_sorted_configs (نسخه جدید با قابلیت خواندن ایموجی)
+# تابع save_sorted_configs (نسخه نهایی، اصلاح‌شده و همراه با عیب‌یابی)
 # ==============================================================================
 def save_sorted_configs(configs: list):
     """
     کانفیگ‌ها را بر اساس پروتکل و موقعیت (ایموجی) تفکیک کرده و ذخیره می‌کند.
     """
     if not configs:
-        print("هیچ کانفیگ موفقی برای ذخیره‌سازی یافت نشد.")
+        print("عیب‌یابی: لیست کانفیگ نهایی (FIN_CONF) خالی است. هیچ فایلی ذخیره نمی‌شود.")
         open("final.txt", 'w').close()
         open("final_b64.txt", 'w').close()
         return
 
+    # --- مرحله عیب‌یابی: نمایش نمونه‌ای از کانفیگ‌های نهایی ---
+    print("\n" + "="*50)
+    print("شروع مرحله ذخیره‌سازی نهایی...")
+    print(f"عیب‌یابی: {len(configs)} کانفیگ موفق برای ذخیره وجود دارد.")
+    print(f"عیب‌یابی: نمونه اولین کانفیگ در لیست نهایی: '{configs[0]}'")
+    print("="*50 + "\n")
+
     configs_by_protocol = {}
     configs_by_country = {}
 
-    print("شروع مرتب‌سازی کانفیگ‌های نهایی بر اساس پروتکل و موقعیت...")
     for config in configs:
         config = config.strip()
         if not config:
             continue
 
-        # --- تفکیک بر اساس پروتکل (بدون تغییر) ---
+        # --- ۱. تفکیک بر اساس پروتکل ---
         protocol = "unknown"
         if config.startswith("vless://"): protocol = "vless"
         elif config.startswith("vmess://"): protocol = "vmess"
@@ -1988,10 +1994,10 @@ def save_sorted_configs(configs: list):
         elif config.startswith("hy2://") or config.startswith("hysteria2://"): protocol = "hy2"
         elif config.startswith("wireguard://"): protocol = "wireguard"
         elif config.startswith("socks://"): protocol = "socks"
+        
         configs_by_protocol.setdefault(protocol, []).append(config)
 
-        # <<<<<<<<<<<<<<<< تغییر اصلی اینجاست >>>>>>>>>>>>>>>>
-        # --- تفکیک بر اساس ایموجی کشور ---
+        # --- ۲. تفکیک بر اساس ایموجی کشور ---
         flag_emoji = "❓" # مقدار پیش‌فرض
         try:
             tag = ""
@@ -2001,38 +2007,51 @@ def save_sorted_configs(configs: list):
                 if missing_padding: encoded_part += '=' * (4 - missing_padding)
                 tag = json.loads(base64.b64decode(encoded_part).decode('utf-8')).get('ps', '')
             else:
+                 # این بخش باید همیشه یک تگ داشته باشد چون در مراحل قبل اضافه شده
                  tag = urllib.parse.unquote(config.split('#', 1)[1])
-
-            # ایموجی را از انتهای تگ استخراج می‌کنیم
+            
             if '::' in tag:
+                # آخرین بخش بعد از :: را به عنوان ایموجی در نظر می‌گیریم
                 potential_emoji = tag.rsplit('::', 1)[1]
-                # یک بررسی ساده برای اینکه مطمئن شویم یک کاراکتر ایموجی است
-                if potential_emoji and not potential_emoji.isalnum():
+                if potential_emoji: # اگر خالی نبود
                     flag_emoji = potential_emoji
-        except Exception:
-            pass # در صورت بروز هرگونه خطا، از ایموجی پیش‌فرض استفاده می‌شود
-        
+        except IndexError:
+            # اگر کانفیگی به هر دلیلی تگ # نداشت
+            print(f"عیب‌یابی: کانفیگ زیر فاقد تگ بود و در دسته '❓' قرار گرفت: {config[:40]}...")
+        except Exception as e:
+            print(f"عیب‌یابی: خطای ناشناخته در استخراج تگ برای کانفیگ {config[:40]...}: {e}")
+
         configs_by_country.setdefault(flag_emoji, []).append(config)
 
+    # --- مرحله عیب‌یابی: نمایش نتایج تفکیک ---
+    print("\n" + "="*50)
+    print("نتیجه تفکیک کانفیگ‌ها:")
+    print(f"پروتکل‌های یافت‌شده: {list(configs_by_protocol.keys())}")
+    print(f"کشورهای (ایموجی) یافت‌شده: {list(configs_by_country.keys())}")
+    print("="*50 + "\n")
+
+    # --- ۳. نوشتن فایل‌ها ---
     def write_to_file(filepath, data_list):
         try:
+            full_content_list = [FILE_HEADER_TEXT] + data_list
             with open(filepath, "w", encoding="utf-8") as f:
-                f.write("\n".join(data_list))
-            print(f"فایل '{filepath}' با موفقیت ذخیره شد.")
+                f.write("\n".join(full_content_list))
+            print(f"فایل '{filepath}' با موفقیت با {len(data_list)} کانفیگ ذخیره شد.")
         except Exception as e:
             print(f"خطا در نوشتن فایل '{filepath}': {e}")
 
-    # --- بخش ذخیره‌سازی (با تغییر کوچک) ---
+    # نوشتن فایل نهایی (همیشه باید کار کند)
     write_to_file("final.txt", configs)
     write_to_file("final_b64.txt", [base64.b64encode(c.encode('utf-8')).decode('utf-8') for c in configs])
 
+    # نوشتن فایل‌های پروتکل‌ها
     for protocol, proto_configs in configs_by_protocol.items():
-        write_to_file(f"{protocol}.txt", proto_configs)
-        write_to_file(f"{protocol}_b64.txt", [base64.b64encode(c.encode('utf-8')).decode('utf-8') for c in proto_configs])
+        if protocol != "unknown": # فایل برای پروتکل‌های ناشناس نمی‌سازیم
+            write_to_file(f"{protocol}.txt", proto_configs)
+            write_to_file(f"{protocol}_b64.txt", [base64.b64encode(c.encode('utf-8')).decode('utf-8') for c in proto_configs])
 
+    # نوشتن فایل‌های کشورها
     os.makedirs("loc", exist_ok=True)
-    # <<<<<<<<<<<<<<<< تغییر اصلی اینجاست >>>>>>>>>>>>>>>>
-    # حالا کلید دیکشنری، خود ایموجی است و نیازی به تبدیل نیست
     for flag_emoji, country_configs in configs_by_country.items():
         filename = os.path.join("loc", f"{flag_emoji}.txt")
         write_to_file(filename, country_configs)
@@ -2074,6 +2093,7 @@ save_sorted_configs(FIN_CONF)
 
 print("پردازش با موفقیت به پایان رسید.")
 exit()
+
 
 
 
