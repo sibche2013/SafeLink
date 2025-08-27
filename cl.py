@@ -1694,9 +1694,11 @@ def fetch_country_code_with_fallback(ip_address: str) -> str:
         except (requests.exceptions.RequestException, ValueError, json.JSONDecodeError) as e_ipinfo:
             print(f"    Failed with ipinfo.io as well: {type(e_ipinfo).__name__} - {str(e_ipinfo)[:100]}")
             raise ValueError(f"Both ipdata.co and ipinfo.io failed for IP {ip_address}.") from e_ipinfo
+# ==============================================================================
+# تابع get_ip_details (نسخه جدید با ایموجی)
+# ==============================================================================
 def get_ip_details(ip_address: Optional[str], original_config_str: str,proxies_to_use: Optional[dict]):
     global FIN_CONF
-    print(f"DEBUG_IP_DETAILS: Entered get_ip_details. IP: '{ip_address}', Config: '{original_config_str[:50]}...'")
     country_code = "XX"
     if ip_address:
         try:
@@ -1707,75 +1709,48 @@ def get_ip_details(ip_address: Optional[str], original_config_str: str,proxies_t
     else:
         print(f"IP address not provided for config {original_config_str.strip()[:30]}... Using default country code XX.")
 
+    # <<<<<<<<<<<<<<<< تغییر اصلی اینجاست >>>>>>>>>>>>>>>>
+    # کد کشور را به ایموجی پرچم تبدیل می‌کنیم
+    flag_emoji = country_code_to_emoji(country_code)
+    
     config_stripped = original_config_str.strip()
-    processed_as_vmess_successfully = False
+    
     if config_stripped.startswith("vmess://"):
         try:
-            vmess_link_parts = config_stripped.replace("vmess://", "", 1).split("#", 1)
-            base64_encoded_part = vmess_link_parts[0]
-            missing_padding = len(base64_encoded_part) % 4
-            if missing_padding:
-                base64_encoded_part += '=' * (4 - missing_padding)
-            decoded_bytes = base64.b64decode(base64_encoded_part)
-            decoded_json_str = decoded_bytes.decode('utf-8')
-            vmess_data = json.loads(decoded_json_str)
-            original_ps = vmess_data.get("ps", "")
-            base_name = original_ps.strip().split("::")[0]
-            if not base_name.strip():
-                add = vmess_data.get("add", "unknown_host")
-                port = vmess_data.get("port", "0")
-                base_name = f"vmess_{add}_{port}"
-            new_ps = f"{base_name.strip()}::{country_code}"
+            # دیکود کردن کانفیگ vmess
+            encoded_part = config_stripped.split("://", 1)[1]
+            missing_padding = len(encoded_part) % 4
+            if missing_padding: encoded_part += '=' * (4 - missing_padding)
+            vmess_data = json.loads(base64.b64decode(encoded_part).decode('utf-8'))
+            
+            # استخراج تگ پایه و اضافه کردن ایموجی
+            base_name = vmess_data.get("ps", "").split("::")[0].strip()
+            new_ps = f"{base_name}::{flag_emoji}"
             vmess_data["ps"] = new_ps
+            
+            # انکود کردن مجدد کانفیگ
             updated_json_str = json.dumps(vmess_data, ensure_ascii=False, separators=(',', ':'))
-            updated_base64_bytes = base64.b64encode(updated_json_str.encode('utf-8'))
-            updated_base64_str = updated_base64_bytes.decode('utf-8').rstrip("=")
+            updated_base64_str = base64.b64encode(updated_json_str.encode('utf-8')).decode('utf-8').rstrip("=")
             final_config_string = f"vmess://{updated_base64_str}"
-            print(f"DEBUG (Vmess): Final config with updated 'ps': {final_config_string}")
+            
             FIN_CONF.append(final_config_string)
-            processed_as_vmess_successfully = True
-        except (base64.binascii.Error, UnicodeDecodeError, json.JSONDecodeError, Exception) as e:
-            print(f"Error processing specialized vmess config {config_stripped[:50]}...: {e}. Falling back to generic tagging.")
-            processed_as_vmess_successfully = False 
-    if not processed_as_vmess_successfully:
+            
+        except Exception as e:
+            print(f"Error processing vmess config to add emoji tag: {e}.")
+            FIN_CONF.append(original_config_str) # در صورت خطا، کانفیگ اصلی اضافه می‌شود
+            
+    else: # برای سایر پروتکل‌ها
         parts = config_stripped.split("#", 1)
         config_base = parts[0]
-        original_tag_encoded = parts[1] if len(parts) > 1 else ""
-
-        try:
-            original_tag_decoded = urllib.parse.unquote(original_tag_encoded)
-        except Exception:
-            original_tag_decoded = original_tag_encoded
-
-        current_tag_base = original_tag_decoded.strip().split("::")[0]
-
-        country_code_pattern = r"::([A-Z]{2}|XX)$"
-        match = re.search(country_code_pattern, current_tag_base)
-        if match:
-            current_tag_base = current_tag_base[:match.start()]
-
-        if not current_tag_base.strip():
-            protocol_match = re.match(r"^\w+://", config_base)
-            protocol_name = protocol_match.group(0).replace("://","").lower() if protocol_match else "config"
-            server_part_for_tag = config_base.split("://", 1)[-1].split("?",1)[0].split("#",1)[0]
-            host_info_candidate = server_part_for_tag.split('@')[-1]
-            address_match = re.match(r"([^:]+)(?::(\d+))?", host_info_candidate)
-            server_brief = "unknown_server"
-            if address_match:
-                host_for_tag = address_match.group(1)
-                port_for_tag = address_match.group(2)
-                server_brief = f"{host_for_tag}"
-                if port_for_tag:
-                    server_brief += f"_{port_for_tag}"
-            elif host_info_candidate and len(host_info_candidate.split(':')[0]) < 50 :
-                 server_brief = host_info_candidate.split(':')[0]
-            current_tag_base = f"{protocol_name}_{server_brief}"
-            print(f"Original tag for '{protocol_name}' config was empty, using generated tag: '{current_tag_base}'.")
-
-        new_tag_unencoded = f"{current_tag_base.strip()}::{country_code}"
+        original_tag = urllib.parse.unquote(parts[1]) if len(parts) > 1 else ""
+        
+        current_tag_base = original_tag.split("::")[0].strip()
+        
+        # ساخت تگ جدید با ایموجی
+        new_tag_unencoded = f"{current_tag_base}::{flag_emoji}"
         new_tag_encoded = urllib.parse.quote(new_tag_unencoded)
         final_config_string = f"{config_base}#{new_tag_encoded}"
-        print(f"DEBUG (Generic/Fallback): Final config with generic tag: {final_config_string}")
+        
         FIN_CONF.append(final_config_string)
 def ping_all():
     print("igo")
@@ -1973,9 +1948,12 @@ def country_code_to_emoji(code: str) -> str:
         return "❓"
     return "".join(chr(ord(c) + 127397) for c in code)
 
+# ==============================================================================
+# تابع save_sorted_configs (نسخه جدید با قابلیت خواندن ایموجی)
+# ==============================================================================
 def save_sorted_configs(configs: list):
     """
-    کانفیگ‌ها را بر اساس پروتکل و موقعیت تفکیک کرده و به همراه نسخه‌های Base64 ذخیره می‌کند.
+    کانفیگ‌ها را بر اساس پروتکل و موقعیت (ایموجی) تفکیک کرده و ذخیره می‌کند.
     """
     if not configs:
         print("هیچ کانفیگ موفقی برای ذخیره‌سازی یافت نشد.")
@@ -1992,6 +1970,7 @@ def save_sorted_configs(configs: list):
         if not config:
             continue
 
+        # --- تفکیک بر اساس پروتکل (بدون تغییر) ---
         protocol = "unknown"
         if config.startswith("vless://"): protocol = "vless"
         elif config.startswith("vmess://"): protocol = "vmess"
@@ -2000,30 +1979,31 @@ def save_sorted_configs(configs: list):
         elif config.startswith("hy2://") or config.startswith("hysteria2://"): protocol = "hy2"
         elif config.startswith("wireguard://"): protocol = "wireguard"
         elif config.startswith("socks://"): protocol = "socks"
-        
         configs_by_protocol.setdefault(protocol, []).append(config)
 
-        country_code = "XX"
+        # <<<<<<<<<<<<<<<< تغییر اصلی اینجاست >>>>>>>>>>>>>>>>
+        # --- تفکیک بر اساس ایموجی کشور ---
+        flag_emoji = "❓" # مقدار پیش‌فرض
         try:
-            # برای vmess، تگ داخل base64 است و توسط get_ip_details اضافه شده. اینجا فقط می‌خوانیم.
+            tag = ""
             if config.startswith("vmess://"):
-                encoded_part = config.split("://", 1)[1].split("#", 1)[0]
+                encoded_part = config.split("://", 1)[1]
                 missing_padding = len(encoded_part) % 4
                 if missing_padding: encoded_part += '=' * (4 - missing_padding)
-                decoded_json_str = base64.b64decode(encoded_part).decode('utf-8')
-                vmess_data = json.loads(decoded_json_str)
-                tag = vmess_data.get('ps', '')
-            else: # برای بقیه پروتکل‌ها
-                 tag_part = config.split('#', 1)[1]
-                 tag = urllib.parse.unquote(tag_part)
+                tag = json.loads(base64.b64decode(encoded_part).decode('utf-8')).get('ps', '')
+            else:
+                 tag = urllib.parse.unquote(config.split('#', 1)[1])
 
-            match = re.search(r'::([A-Z]{2}|XX)$', tag)
-            if match:
-                country_code = match.group(1)
+            # ایموجی را از انتهای تگ استخراج می‌کنیم
+            if '::' in tag:
+                potential_emoji = tag.rsplit('::', 1)[1]
+                # یک بررسی ساده برای اینکه مطمئن شویم یک کاراکتر ایموجی است
+                if potential_emoji and not potential_emoji.isalnum():
+                    flag_emoji = potential_emoji
         except Exception:
-            pass # اگر تگ یا فرمت مورد نظر وجود نداشت، همان XX باقی می‌ماند
+            pass # در صورت بروز هرگونه خطا، از ایموجی پیش‌فرض استفاده می‌شود
         
-        configs_by_country.setdefault(country_code, []).append(config)
+        configs_by_country.setdefault(flag_emoji, []).append(config)
 
     def write_to_file(filepath, data_list):
         try:
@@ -2033,23 +2013,20 @@ def save_sorted_configs(configs: list):
         except Exception as e:
             print(f"خطا در نوشتن فایل '{filepath}': {e}")
 
-    # 1. ذخیره فایل نهایی
+    # --- بخش ذخیره‌سازی (با تغییر کوچک) ---
     write_to_file("final.txt", configs)
-    final_b64 = [base64.b64encode(c.encode('utf-8')).decode('utf-8') for c in configs]
-    write_to_file("final_b64.txt", final_b64)
+    write_to_file("final_b64.txt", [base64.b64encode(c.encode('utf-8')).decode('utf-8') for c in configs])
 
-    # 2. ذخیره بر اساس پروتکل
     for protocol, proto_configs in configs_by_protocol.items():
         write_to_file(f"{protocol}.txt", proto_configs)
-        proto_b64 = [base64.b64encode(c.encode('utf-8')).decode('utf-8') for c in proto_configs]
-        write_to_file(f"{protocol}_b64.txt", proto_b64)
+        write_to_file(f"{protocol}_b64.txt", [base64.b64encode(c.encode('utf-8')).decode('utf-8') for c in proto_configs])
 
-    # 3. ذخیره بر اساس موقعیت
     os.makedirs("loc", exist_ok=True)
-    for code, country_configs in configs_by_country.items():
-        flag_emoji = country_code_to_emoji(code)
-        write_to_file(os.path.join("loc", f"{flag_emoji}.txt"), country_configs)
-
+    # <<<<<<<<<<<<<<<< تغییر اصلی اینجاست >>>>>>>>>>>>>>>>
+    # حالا کلید دیکشنری، خود ایموجی است و نیازی به تبدیل نیست
+    for flag_emoji, country_configs in configs_by_country.items():
+        filename = os.path.join("loc", f"{flag_emoji}.txt")
+        write_to_file(filename, country_configs)
 # ==============================================================================
 # بخش اصلی اجرای اسکریپت
 # ==============================================================================
@@ -2088,3 +2065,4 @@ save_sorted_configs(FIN_CONF)
 
 print("پردازش با موفقیت به پایان رسید.")
 exit()
+
