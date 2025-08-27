@@ -9,6 +9,12 @@ on:
   schedule:
     - cron: '0 */1 * * *' # هر 8 ساعت اجرا می‌شود
 
+# <<<<<<<<<<<<<<<< این بخش را اضافه کنید >>>>>>>>>>>>>>>>
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
 permissions:
   contents: write # مجوز نوشتن برای پوش کردن لازم است
 
@@ -31,6 +37,19 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: 3.x # بهتر است نسخه دقیق‌تری مثل '3.11' مشخص کنید
+
+      - name: Clean up old results
+        run: |
+          rm -f final.txt final_b64.txt vless*.txt vmess*.txt trojan*.txt ss*.txt hy2*.txt wireguard*.txt socks*.txt
+          rm -rf loc/
+
+      - name: Set execute permissions
+        run: |
+          chmod +x xray/xray
+          chmod +x hy2/hysteria
+
+      - name: Run checker script
+        run: python cl.py
 
       # Cache steps (اختیاری ولی خوب)
       - name: Set weekly cache key
